@@ -3,6 +3,7 @@
 #include <vector>
 #include <set>
 #include <climits>
+#include <algorithm>
 
 #define TASK_ONE 1
 #define TASK_TWO 2
@@ -65,7 +66,7 @@ public:
     vector<vector<pair<int, char>>> t_adj; // transposed adjacency matrix
 
     void initialize_dp_matrix() {
-        steps_max_limit = TASK_ONE_MAX_K + 2 * n;
+        steps_max_limit = TASK_ONE_MAX_K + n;
 
         dp.resize(steps_max_limit + 1);
         for (int i = 0; i <= steps_max_limit; ++i) {
@@ -93,6 +94,8 @@ public:
     void solve() override {
         initialize_dp_matrix();
         initialize_transposed_adjacency_matrix();
+
+        int r = -1;
 
         // step for
         for (int i = 0; i < steps_max_limit; i++) {
@@ -149,7 +152,98 @@ public:
 
 class TaskTwo : public Task {
 public:
+    vector<pair<int, vector<vector<int>>>> ths;
+    vector<pair<int, vector<vector<bool>>>> adjs;
+    string rres, lres;
+
+    void multiply(vector<vector<bool>>& a, vector<vector<bool>>& b, int _s) {
+        // Creating an auxiliary matrix to store elements
+        vector<vector<bool>> m(n + 1, vector<bool>(n + 1));
+
+        // Get the address and intermediate matrix from th
+        pair<int, vector<vector<int>>> th = {_s, vector<vector<int>>(n + 1, vector<int>(n + 1, 0))};
+
+        // Calculating if there is a path of length k from i to j
+        for (int i = 1; i <= n; i++) {
+            for (int j = 1; j <= n; j++) {
+                m[i][j] = false;
+                for (int k = 1; k <= n; k++) {
+                    if (a[i][k] && b[k][j]) {
+                        m[i][j] = true;
+                        
+                        if (th.second[i][j] == 0) {
+                            th.second[i][j] = k;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Storing the through elements result in ths
+        ths.push_back(th);
+
+        // Storing the matrix result in adjs
+        adjs.push_back({_s, m});
+    }
+
+    void initialize_task2() {
+        // initialize G
+        vector<vector<bool>> G(n + 1, vector<bool>(n + 1, false));
+        for (int i = 1; i <= n; ++i) {
+            for (auto& edge : adj[i]) {
+                G[i][edge.first] = true;
+            }
+        }
+
+        adjs.push_back({1, G});
+    }
+
+    // Calculate the exponents of the adacency matrices, forming a tree
+    void matrix_power(int p) {
+        int _s = p << 1, _r = 1;
+
+        if (_s <= k) {
+            _r = p;
+        } else {
+            while (_r + p <= k) _r <<= 1;
+            _r >>= 1;
+        }
+
+        // search for the first element of the pair from the adjs vector to check if the matrix has actually been calculated
+        bool power_calculated = std::any_of(adjs.begin(), adjs.end(), 
+            [&p, &_r](const pair<int, vector<vector<bool>>>& pair) {
+                return pair.first == p + _r;
+            }
+        );
+        if (power_calculated) return;
+
+        // get the left and right matrices, searching after the first element from the pair
+        auto lmat = std::find_if(adjs.begin(), adjs.end(), [&p](const pair<int, vector<vector<bool>>>& pair) { return pair.first == p; });
+        auto rmat = std::find_if(adjs.begin(), adjs.end(), [&_r](const pair<int, vector<vector<bool>>>& pair) { return pair.first == _r; });
+
+        if (lmat == adjs.end() || rmat == adjs.end()) return;
+
+        multiply(lmat->second, rmat->second, p + _r);
+
+        int next = p + _r;
+        if (next == k)  return;
+        matrix_power(p + _r);
+    }
+
+    void merge_results() {
+        if (rres == "-1" || lres == "-1") {
+            result = "-1";
+        }
+
+        result = rres + lres;
+    }
+
     void solve() override {
+        initialize_task2();
+        matrix_power(1);
+        // bfs();
+        // adj_reconstruct();
+        merge_results();
     }
 };
 
