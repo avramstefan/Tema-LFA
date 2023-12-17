@@ -132,7 +132,7 @@ public:
 
             // traverse the path from r to 0 and reverse the string
             while (r) {
-                // stiu nodul curent, stiu nodul parinte, ma folosesc de adj[curr][parent].second
+                // i know the current node, i know the parent node
                 p = dp[r--][c].second;
 
                 int adj_p = 0;
@@ -152,9 +152,11 @@ public:
 
 class TaskTwo : public Task {
 public:
-    vector<pair<int, vector<vector<int>>>> ths;
+    vector<pair<int, vector<vector<int>>>> ths; // throughs (intermediates)
     vector<pair<int, vector<vector<bool>>>> adjs;
+    vector<pair<int, pair<int, int>>> th_components; // how are the ths pows composed
     string rres, lres;
+    int min_bfs, bfs_src_node;
 
     void multiply(vector<vector<bool>>& a, vector<vector<bool>>& b, int _s) {
         // Creating an auxiliary matrix to store elements
@@ -163,7 +165,7 @@ public:
         // Get the address and intermediate matrix from th
         pair<int, vector<vector<int>>> th = {_s, vector<vector<int>>(n + 1, vector<int>(n + 1, 0))};
 
-        // Calculating if there is a path of length k from i to j
+        // Calculating if there is a path of length _s from i to j
         for (int i = 1; i <= n; i++) {
             for (int j = 1; j <= n; j++) {
                 m[i][j] = false;
@@ -224,6 +226,7 @@ public:
         if (lmat == adjs.end() || rmat == adjs.end()) return;
 
         multiply(lmat->second, rmat->second, p + _r);
+        th_components.push_back({p + _r, {p, _r}});
 
         int next = p + _r;
         if (next == k)  return;
@@ -234,15 +237,122 @@ public:
         if (rres == "-1" || lres == "-1") {
             result = "-1";
         }
+    
+        result = lres + rres;
+    }
 
-        result = rres + lres;
+    bool node_is_final(int node) {
+        return std::any_of(f.begin(), f.end(), [&node](const int& final_node) { return final_node == node; });
+    }
+
+    void rec_bfs(int node, int steps, vector<bool>& visited, string path, int &s_node) {
+        if (steps >= min_bfs) return;
+
+        if (node_is_final(node)) {
+            min_bfs = steps;
+            rres = path;
+            bfs_src_node = s_node;
+            return;
+        }
+
+        visited[node] = true;
+
+        for (auto &edge : adj[node]) {
+            if (!visited[edge.first]) {
+                rec_bfs(edge.first, steps + 1, visited, path + edge.second, s_node);
+            }
+        }
+
+        visited[node] = false;
+    }
+
+    void bfs() {
+        // check if there is an adj matrix for pow k
+        int loc_k = k;
+        auto adj_k = std::find_if(adjs.begin(), adjs.end(), [&loc_k](const pair<int, vector<vector<bool>>>& pair) { return pair.first == loc_k; });
+        if (adj_k == adjs.end()) {
+            rres = "-1";
+            return;
+        }
+
+        // extract the nodes from where to start from the adj matrix of pow k
+        vector <int> s_nodes;
+        for (int i = 1; i <= n; i++) {
+            if (adj_k->second[s][i]) {
+                s_nodes.push_back(i);
+            }
+        }
+
+        // if there are no nodes from where to start, the result is -1
+        if (s_nodes.empty()) {
+            rres = "-1";
+            return;
+        }
+
+        // if one node from s_nodes is final then let the rres be empty
+        for (auto& node : s_nodes) {
+            if (node_is_final(node)) {
+                bfs_src_node = node;
+                rres = "";
+                return;
+            }
+        }
+
+        bfs_src_node = s_nodes[0];
+        min_bfs = INT_MAX;
+        for (auto& node : s_nodes) {
+            vector<bool> visited(n + 1, false);
+            rec_bfs(node, 0, visited, "", node);
+        }
+
+        if (min_bfs == INT_MAX) {
+            rres = "-1";
+        }
+    }
+
+    /*
+        * src - the source node
+        * dest - the dest node
+        * p - the power of the adj matrix for the current step
+    */
+    string adj_reconstruct(int src, int dest, int p) {
+        // cout << src << ' ' << dest << ' ' << p << '\n';
+        if (src == 0 || dest == 0) return "";
+
+        if (p == 1) {
+            // extract char
+            char c = std::find_if(adj[src].begin(), adj[src].end(), [&dest](const pair<int, char>& pair) { return pair.first == dest; })->second;
+            string ret(1, c);
+            return ret;
+        }
+
+        // get the through matrix for the current pow
+        auto th_p = std::find_if(ths.begin(), ths.end(), [&p](const pair<int, vector<vector<int>>>& pair) { return pair.first == p; });
+
+        if (th_p == ths.end()) {
+            return "";
+        }
+
+        int l_pow = std::find_if(th_components.begin(), th_components.end(), [&p](const pair<int, pair<int, int>>& pair) { return pair.first == p; })->second.first;
+        int r_pow = std::find_if(th_components.begin(), th_components.end(), [&p](const pair<int, pair<int, int>>& pair) { return pair.first == p; })->second.second;
+        // cout << src << ' ' << dest << ' ' << p << ' ' << l_pow << ' ' << r_pow << '\n';
+
+        string l_path = adj_reconstruct(src, th_p->second[src][dest], l_pow);
+        string r_path = adj_reconstruct(th_p->second[src][dest], dest, r_pow);
+    
+        return l_path + r_path;
     }
 
     void solve() override {
         initialize_task2();
         matrix_power(1);
-        // bfs();
-        // adj_reconstruct();
+        bfs();
+
+        // if rres is "-1" it means we cannot get to a final node so we don't need to reconstruct the path
+        if (rres != "-1") {
+            lres = adj_reconstruct(s, bfs_src_node, k);
+        }
+
         merge_results();
     }
 };
